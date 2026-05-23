@@ -41,8 +41,8 @@
 | 能力 | 覆盖内容 |
 |------|------|
 | AI 决策报告 | 核心结论、评分、趋势、买卖点位、风险警报、催化因素、操作检查清单 |
-| 多市场数据聚合 | A股、港股、美股、ETF；行情、K 线、技术指标、资金流、筹码、新闻、公告和基本面 |
-| Web / 桌面工作台 | 手动分析、任务进度、历史报告、完整 Markdown、回测、持仓、配置管理、浅色 / 深色主题 |
+| 多市场数据聚合 | A股、港股、美股、**加密货币**、ETF；行情、K 线、技术指标、资金流、筹码、新闻、公告和基本面 |
+| Web / 桌面工作台 | 手动分析、任务进度、历史报告、完整 Markdown、回测、持仓、**加密货币仪表盘**、**资金流向面板**、**新闻聚合**、浅色 / 深色主题 |
 | Agent 策略问股 | 多轮追问，支持均线、缠论、波浪、趋势、热点、事件、成长、预期等 15 种内置策略，覆盖 Web/Bot/API |
 | 智能导入与补全 | 图片、CSV/Excel、剪贴板导入；股票代码/名称/拼音/别名补全 |
 | 自动化与推送 | GitHub Actions、Docker、本地定时任务、FastAPI 服务和企业微信/飞书/Telegram/Discord/Slack/邮件推送 |
@@ -55,6 +55,9 @@
 |------|------|
 | AI 模型 | [Anspire](https://open.anspire.cn/?share_code=QFBC0FYC)、[AIHubMix](https://aihubmix.com/?aff=CfMq)、Gemini、OpenAI 兼容、DeepSeek、通义千问、Claude、Ollama 本地模型等 |
 | 行情数据 | [TickFlow](https://tickflow.org/auth/register?ref=WDSGSPS5XC)、AkShare、Tushare、Pytdx、Baostock、YFinance、Longbridge |
+| 加密货币数据 | CoinPaprika、CoinGecko、Blockchain.com、CoinMetrics、DeFiLlama、alternative.me (Fear & Greed)、Yahoo/FRED |
+| 新闻来源 | 9 个加密货币 RSS + 6 个 A 股新闻源 + 华尔街见闻、东方财富、证券时报、第一财经、界面新闻 |
+| 资本流向 | 北向资金、板块资金流向、龙虎榜（东方财富） |
 | 新闻搜索 | [Anspire](https://open.anspire.cn/?share_code=QFBC0FYC)、[SerpAPI](https://serpapi.com/baidu-search-api?utm_source=github_daily_stock_analysis)、[Tavily](https://tavily.com/)、[Bocha](https://open.bocha.cn/)、[Brave](https://brave.com/search/api/)、[MiniMax](https://platform.minimaxi.com/)、SearXNG |
 | 社交舆情 | [Stock Sentiment API](https://api.adanos.org/docs)（Reddit / X / Polymarket，仅美股，可选） |
 

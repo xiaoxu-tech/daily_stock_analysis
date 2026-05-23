@@ -381,6 +381,28 @@ def parse_arguments() -> argparse.Namespace:
         help='强制回测（即使已有回测结果也重新计算）'
     )
 
+    # === Crypto ===
+    parser.add_argument(
+        '--crypto',
+        action='store_true',
+        help='运行加密货币分析（新闻抓取+信号计算+飞书通知）'
+    )
+
+    parser.add_argument(
+        '--crypto-mode',
+        type=str,
+        default='full',
+        choices=['full', 'news-only', 'signals-only'],
+        help='加密货币分析模式（默认 full）'
+    )
+
+    parser.add_argument(
+        '--crypto-coins',
+        type=str,
+        default=None,
+        help='指定加密货币符号，逗号分隔（默认 BTC,ETH,SOL）'
+    )
+
     return parser.parse_args()
 
 
@@ -878,6 +900,31 @@ def main() -> int:
                 f"completed={stats.get('completed')} insufficient={stats.get('insufficient')} errors={stats.get('errors')}"
             )
             return 0
+
+        # 模式0.5: 加密货币分析
+        if getattr(args, 'crypto', False):
+            logger.info("模式: 加密货币分析")
+            crypto_mode = getattr(args, 'crypto_mode', 'full')
+            crypto_coins_raw = getattr(args, 'crypto_coins', None)
+            crypto_coins = (
+                [c.strip().upper() for c in crypto_coins_raw.split(',') if c.strip()]
+                if crypto_coins_raw
+                else None
+            )
+
+            try:
+                from src.intel.crypto_notifier import run_crypto_pipeline
+                result = run_crypto_pipeline(mode=crypto_mode, coins=crypto_coins)
+                logger.info(
+                    "加密货币分析完成: signals=%s, news=%s, notification=%s",
+                    "computed" if result.get("signals") else "skipped",
+                    "done" if result.get("news") else "skipped",
+                    "sent" if result.get("notification") else "skipped",
+                )
+                return 0
+            except Exception as e:
+                logger.error(f"加密货币分析失败: {e}", exc_info=True)
+                return 1
 
         # 模式1: 仅大盘复盘
         if args.market_review:

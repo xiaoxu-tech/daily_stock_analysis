@@ -425,6 +425,16 @@ git push -u origin main
 | `TUSHARE_TOKEN` | Tushare Token | 可选 |
 | `GEMINI_MODEL` | 模型名称（默认 gemini-2.0-flash） | 可选 |
 
+#### 加密货币分析相关 Secrets
+
+| Secret 名称 | 说明 | 必填 |
+|------------|------|------|
+| `CRYPTO_COINS` | 关注的加密货币，逗号分隔（默认 BTC,ETH,SOL） | 可选 |
+| `CRYPTO_ENABLED` | 是否启用加密货币分析（默认 false） | 可选 |
+| `CRYPTO_NEWS_SOURCES` | 新闻源限制，逗号分隔（留空=全部9个源） | 可选 |
+
+> *注：加密货币分析通过独立的 workflow `crypto-news-analysis.yml` 运行，每4小时自动抓取新闻和计算信号，结果推送到飞书。
+
 > *注：通知渠道至少配置一个，支持多渠道同时推送
 
 #### 3. 验证 Workflow 文件
@@ -483,6 +493,23 @@ schedule:
 git commit -am "Update stock list"
 git push
 ```
+
+### 加密货币分析定时任务
+
+加密货币分析使用独立的工作流 `crypto-news-analysis.yml`，默认**每4小时**运行一次（加密市场24/7交易）。
+
+手动触发：
+1. 打开仓库页面 → **Actions** 标签
+2. 选择 **"加密货币新闻与信号分析"** workflow
+3. 点击 **"Run workflow"** 按钮
+4. 选择运行模式：
+   - `full` - 完整分析（新闻+信号+通知）
+   - `news-only` - 仅新闻抓取
+   - `signals-only` - 仅信号计算
+5. 输入关注的币种（逗号分隔，如 `BTC,ETH,SOL`）
+6. 点击绿色 **"Run workflow"** 按钮
+
+分析结果自动推送到飞书群（需配置 `FEISHU_WEBHOOK_URL`）。
 
 ### 常见问题
 

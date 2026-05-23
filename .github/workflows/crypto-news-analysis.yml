@@ -1,0 +1,201 @@
+name: 加密货币新闻与信号分析
+
+on:
+  # 定时触发 - 每4小时运行一次（加密市场24/7）
+  schedule:
+    - cron: '17 */4 * * *'     # 每4小时，UTC 17分（错峰）
+
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '运行模式'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full          # 完整分析（新闻+信号+摘要）
+          - news-only     # 仅新闻抓取
+          - signals-only  # 仅信号计算
+      coins:
+        description: '分析的币种（逗号分隔，默认BTC,ETH,SOL）'
+        required: false
+        default: 'BTC,ETH,SOL'
+        type: string
+
+# 并发控制
+concurrency:
+  group: crypto-analysis
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: 随机延迟（避免固定时间访问）
+        run: sleep $((RANDOM % 30))
+
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 安装依赖
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 创建必要目录
+        run: |
+          mkdir -p data logs reports
+
+      - name: 执行加密货币分析
+        env:
+          # LLM 配置（复用主分析任务的环境变量）
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || secrets.GEMINI_MODEL || 'gemini-3-flash-preview' }}
+          GEMINI_MODEL_FALLBACK: ${{ vars.GEMINI_MODEL_FALLBACK || secrets.GEMINI_MODEL_FALLBACK || 'gemini-2.5-flash' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || secrets.OPENAI_BASE_URL }}
+          AIHUBMIX_KEY: ${{ secrets.AIHUBMIX_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # 通知渠道
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}
+          FEISHU_WEBHOOK_KEYWORD: ${{ vars.FEISHU_WEBHOOK_KEYWORD || secrets.FEISHU_WEBHOOK_KEYWORD }}
+
+          # 模式参数
+          CRYPTO_MODE: ${{ github.event.inputs.mode || 'full' }}
+          CRYPTO_COINS: ${{ github.event.inputs.coins || 'BTC,ETH,SOL' }}
+
+          # 数据库路径（使用 Workflow 临时目录）
+          DATABASE_PATH: ${{ runner.temp }}/crypto_analysis.db
+        run: |
+          echo "=== 加密货币分析开始 ==="
+          echo "模式: ${CRYPTO_MODE}"
+          echo "币种: ${CRYPTO_COINS}"
+
+          python -c "
+          import os, sys, json, logging
+          from datetime import datetime
+
+          logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+          logger = logging.getLogger('crypto-workflow')
+
+          mode = os.getenv('CRYPTO_MODE', 'full')
+          coins = [c.strip().upper() for c in os.getenv('CRYPTO_COINS', 'BTC,ETH,SOL').split(',') if c.strip()]
+
+          results = {}
+
+          # ── 新闻抓取 ──
+          if mode in ('full', 'news-only'):
+              logger.info('=== Phase: Crypto News Scraping ===')
+              try:
+                  from src.intel.crypto_ingestor import CryptoIngestor
+                  from src.storage import get_db
+
+                  db = get_db()
+                  ingestor = CryptoIngestor(
+                      db_manager=db,
+                      llm_provider=None,  # LLM analysis will be done separately
+                      max_per_source=10,
+                      dedup_threshold=0.75,
+                  )
+                  pipeline_result = ingestor.run(summarize=False)
+                  results['news'] = pipeline_result
+                  logger.info(f'News pipeline: scraped={pipeline_result[\"scraped_count\"]}, deduped={pipeline_result[\"deduped_count\"]}, stored={pipeline_result[\"stored_count\"]}')
+              except Exception as e:
+                  logger.error(f'News scraping failed: {e}', exc_info=True)
+                  results['news'] = {'error': str(e)}
+
+          # ── 信号计算 ──
+          if mode in ('full', 'signals-only'):
+              logger.info('=== Phase: Crypto Signal Computation ===')
+              signal_results = {}
+              try:
+                  from src.signals.crypto.fusion import SignalFusion
+                  sf = SignalFusion()
+                  for coin in coins:
+                      try:
+                          sig = sf.get_composite_signal(coin)
+                          signal_results[coin] = {
+                              'signal': sig.get('signal'),
+                              'composite': sig.get('composite'),
+                              'signal_cn': sig.get('signalCn'),
+                          }
+                          logger.info(f'{coin}: signal={sig.get(\"signal\")}, composite={sig.get(\"composite\"):.2f}')
+                      except Exception as e:
+                          logger.error(f'Signal computation failed for {coin}: {e}')
+                          signal_results[coin] = {'error': str(e)}
+                  results['signals'] = signal_results
+              except Exception as e:
+                  logger.error(f'Signal engine failed: {e}', exc_info=True)
+                  results['signals'] = {'error': str(e)}
+
+          # ── 飞书通知 ──
+          feishu_url = os.getenv('FEISHU_WEBHOOK_URL', '')
+          if feishu_url:
+              logger.info('=== Phase: Feishu Notification ===')
+              try:
+                  from src.config import get_config
+                  from src.notification_sender.feishu_sender import FeishuSender
+
+                  cfg = get_config()
+                  sender = FeishuSender(cfg)
+
+                  lines = ['【加密货币分析报告】', f'时间: {datetime.now().strftime(\"%Y-%m-%d %H:%M\")}', '']
+
+                  # 信号摘要
+                  sigs = results.get('signals', {})
+                  if sigs and not sigs.get('error'):
+                      lines.append('📊 综合信号:')
+                      for coin, s in sigs.items():
+                          if 'error' not in s:
+                              emoji = '🟢' if s['composite'] > 0.3 else ('🟡' if s['composite'] > -0.3 else '🔴')
+                              lines.append(f'  {emoji} {coin}: {s[\"signal_cn\"]} ({s[\"composite\"]:.2f})')
+                      lines.append('')
+
+                  # 新闻摘要
+                  news = results.get('news', {})
+                  if news and not news.get('error'):
+                      lines.append(f'📰 新闻抓取: {news.get(\"scraped_count\", 0)} 条原始 → {news.get(\"deduped_count\", 0)} 条去重 → {news.get(\"stored_count\", 0)} 条入库')
+
+                  lines.append('')
+                  lines.append('⚡ 由 DSA Crypto Pipeline 自动生成')
+
+                  content = '\n'.join(lines)
+                  success = sender.send_to_feishu(content)
+                  results['notification'] = {'sent': success, 'channel': 'feishu'}
+                  logger.info(f'Feishu notification: {\"sent\" if success else \"failed\"}')
+              except Exception as e:
+                  logger.error(f'Notification failed: {e}', exc_info=True)
+                  results['notification'] = {'error': str(e)}
+          else:
+              logger.info('FEISHU_WEBHOOK_URL not configured, skip notification')
+
+          # 输出摘要
+          print()
+          print('=== RESULTS ===')
+          print(json.dumps(results, ensure_ascii=False, indent=2, default=str))
+          "
+
+      - name: 诊断通知配置
+        if: always()
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}
+        run: |
+          echo "=== 通知配置诊断 ==="
+          echo "飞书: $([ -n \"${FEISHU_WEBHOOK_URL}\" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
+          if [ -n "${FEISHU_WEBHOOK_SECRET}" ]; then
+            echo "飞书签名: ✅ 已配置"
+          fi
