@@ -50,7 +50,11 @@ import time
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from data_provider.base import canonical_stock_code
+try:
+    from data_provider.base import canonical_stock_code
+except ImportError:
+    def canonical_stock_code(c: str) -> str:
+        return c.strip().upper()
 from src.webui_frontend import prepare_webui_frontend_assets
 from src.config import get_config, Config
 from src.logging_config import setup_logging

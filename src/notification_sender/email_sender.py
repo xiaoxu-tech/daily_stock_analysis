@@ -15,7 +15,11 @@ from email.header import Header
 from email.utils import formataddr
 import smtplib
 
-from data_provider.base import normalize_stock_code
+try:
+    from data_provider.base import normalize_stock_code
+except ImportError:
+    def normalize_stock_code(c: str) -> str:
+        return c.strip().upper()
 from src.config import Config
 from src.formatters import markdown_to_html_document
 
