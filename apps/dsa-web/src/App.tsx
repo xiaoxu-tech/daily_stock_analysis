@@ -13,6 +13,10 @@ import './App.css';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const BacktestPage = lazy(() => import('./pages/BacktestPage'));
+const CapitalFlowPage = lazy(() => import('./pages/CapitalFlowPage'));
+const CryptoPage = lazy(() => import('./pages/CryptoPage'));
+const CryptoAnalysisPage = lazy(() => import('./pages/CryptoAnalysisPage'));
+const NewsFeedPage = lazy(() => import('./pages/NewsFeedPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -80,6 +84,10 @@ const AppContent: React.FC = () => {
         <Route path="/backtest" element={<BacktestPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/crypto" element={<CryptoPage />} />
+        <Route path="/crypto/:symbol" element={<CryptoAnalysisPage />} />
+        <Route path="/news" element={<NewsFeedPage />} />
+        <Route path="/capital-flow" element={<CapitalFlowPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
