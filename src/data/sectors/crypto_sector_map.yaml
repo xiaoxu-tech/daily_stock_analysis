@@ -1,0 +1,264 @@
+# Coin-to-Sector Mapping
+# Primary sector definitions for top crypto assets.
+# Format: SYMBOL: {name, primary_sector, sub_sectors, paprika_id}
+---
+BTC:
+  name: Bitcoin
+  primary_sector: layer1
+  sub_sectors: [btcfi]
+  paprika_id: btc-bitcoin
+ETH:
+  name: Ethereum
+  primary_sector: layer1
+  sub_sectors: [defi, rwa]
+  paprika_id: eth-ethereum
+SOL:
+  name: Solana
+  primary_sector: layer1
+  sub_sectors: [defi, meme]
+  paprika_id: sol-solana
+XRP:
+  name: XRP
+  primary_sector: layer1
+  sub_sectors: []
+  paprika_id: xrp-xrp
+ADA:
+  name: Cardano
+  primary_sector: layer1
+  sub_sectors: []
+  paprika_id: ada-cardano
+AVAX:
+  name: Avalanche
+  primary_sector: layer1
+  sub_sectors: [defi, gamefi]
+  paprika_id: avax-avalanche
+SUI:
+  name: Sui
+  primary_sector: layer1
+  sub_sectors: [defi, gamefi]
+  paprika_id: sui-sui
+APT:
+  name: Aptos
+  primary_sector: layer1
+  sub_sectors: []
+  paprika_id: apt-aptos
+DOT:
+  name: Polkadot
+  primary_sector: layer1
+  sub_sectors: [infra]
+  paprika_id: dot-polkadot
+NEAR:
+  name: NEAR Protocol
+  primary_sector: layer1
+  sub_sectors: [ai_crypto]
+  paprika_id: near-near-protocol
+ARB:
+  name: Arbitrum
+  primary_sector: layer2
+  sub_sectors: [defi]
+  paprika_id: arb-arbitrum
+OP:
+  name: Optimism
+  primary_sector: layer2
+  sub_sectors: [defi]
+  paprika_id: op-optimism
+BASE:
+  name: Base
+  primary_sector: layer2
+  sub_sectors: [defi, meme]
+  paprika_id: base-base
+MATIC:
+  name: Polygon
+  primary_sector: layer2
+  sub_sectors: [defi, gamefi]
+  paprika_id: matic-polygon
+UNI:
+  name: Uniswap
+  primary_sector: defi
+  sub_sectors: [infra]
+  paprika_id: uni-uniswap
+AAVE:
+  name: Aave
+  primary_sector: defi
+  sub_sectors: []
+  paprika_id: aave-new
+ONDO:
+  name: Ondo Finance
+  primary_sector: rwa
+  sub_sectors: []
+  paprika_id: ondo-ondo-finance
+MKR:
+  name: Maker
+  primary_sector: defi
+  sub_sectors: [rwa]
+  paprika_id: mkr-maker
+TAO:
+  name: Bittensor
+  primary_sector: ai_crypto
+  sub_sectors: [infra]
+  paprika_id: tao-bittensor
+FET:
+  name: Fetch.ai
+  primary_sector: ai_crypto
+  sub_sectors: [infra]
+  paprika_id: fet-etch
+RENDER:
+  name: Render Network
+  primary_sector: ai_crypto
+  sub_sectors: [depin]
+  paprika_id: render-render
+AKT:
+  name: Akash Network
+  primary_sector: ai_crypto
+  sub_sectors: [depin]
+  paprika_id: akt-akash-network
+DOGE:
+  name: Dogecoin
+  primary_sector: meme
+  sub_sectors: []
+  paprika_id: doge-dogecoin
+PEPE:
+  name: Pepe
+  primary_sector: meme
+  sub_sectors: []
+  paprika_id: pepe-pepe
+WIF:
+  name: dogwifhat
+  primary_sector: meme
+  sub_sectors: []
+  paprika_id: wif-dogwifhat
+BONK:
+  name: Bonk
+  primary_sector: meme
+  sub_sectors: []
+  paprika_id: bonk-bonk
+IMX:
+  name: Immutable
+  primary_sector: gamefi
+  sub_sectors: [layer2]
+  paprika_id: imx-immutable-x
+GALA:
+  name: Gala
+  primary_sector: gamefi
+  sub_sectors: []
+  paprika_id: gala-gala
+HNT:
+  name: Helium
+  primary_sector: depin
+  sub_sectors: []
+  paprika_id: hnt-helium
+FIL:
+  name: Filecoin
+  primary_sector: depin
+  sub_sectors: [infra]
+  paprika_id: fil-filecoin
+LINK:
+  name: Chainlink
+  primary_sector: infra
+  sub_sectors: [defi, rwa]
+  paprika_id: link-chainlink
+AAVE:
+  name: Aave
+  primary_sector: defi
+  sub_sectors: []
+  paprika_id: aave-new
+BNB:
+  name: BNB
+  primary_sector: exchange
+  sub_sectors: [layer1, defi]
+  paprika_id: bnb-binance-coin
+XMR:
+  name: Monero
+  primary_sector: privacy
+  sub_sectors: []
+  paprika_id: xmr-monero
+ICP:
+  name: Internet Computer
+  primary_sector: infra
+  sub_sectors: [ai_crypto]
+  paprika_id: icp-internet-computer
+ATOM:
+  name: Cosmos
+  primary_sector: infra
+  sub_sectors: [defi]
+  paprika_id: atom-cosmos
+TRX:
+  name: TRON
+  primary_sector: layer1
+  sub_sectors: [defi]
+  paprika_id: trx-tron
+STX:
+  name: Stacks
+  primary_sector: layer2
+  sub_sectors: [btcfi]
+  paprika_id: stx-stacks
+INJ:
+  name: Injective
+  primary_sector: defi
+  sub_sectors: [infra]
+  paprika_id: inj-injective
+SEI:
+  name: Sei
+  primary_sector: layer1
+  sub_sectors: [defi]
+  paprika_id: sei-sei
+TIA:
+  name: Celestia
+  primary_sector: infra
+  sub_sectors: []
+  paprika_id: tia-celestia
+ENA:
+  name: Ethena
+  primary_sector: defi
+  sub_sectors: [stablecoin]
+  paprika_id: ethena
+STRK:
+  name: Starknet
+  primary_sector: layer2
+  sub_sectors: []
+  paprika_id: strk-starknet
+BEAM:
+  name: Beam
+  primary_sector: gamefi
+  sub_sectors: []
+  paprika_id: beam-beam
+PENDLE:
+  name: Pendle
+  primary_sector: defi
+  sub_sectors: []
+  paprika_id: pendle-pendle
+CRV:
+  name: Curve DAO
+  primary_sector: defi
+  sub_sectors: [stablecoin]
+  paprika_id: crv-curve-dao-token
+LDO:
+  name: Lido DAO
+  primary_sector: defi
+  sub_sectors: [infra]
+  paprika_id: ldo-lido-dao
+JUP:
+  name: Jupiter
+  primary_sector: defi
+  sub_sectors: [infra]
+  paprika_id: jup-jupiter-ag
+SAGA:
+  name: Saga
+  primary_sector: layer1
+  sub_sectors: [gamefi]
+  paprika_id: saga-saga
+DYM:
+  name: Dymension
+  primary_sector: infra
+  sub_sectors: []
+  paprika_id: dym-dymension
+WORM:
+  name: Wormhole
+  primary_sector: infra
+  sub_sectors: []
+  paprika_id: worm-wormhole
+PYTH:
+  name: Pyth Network
+  primary_sector: infra
+  sub_sectors: [defi]
+  paprika_id: pyth-pyth-network

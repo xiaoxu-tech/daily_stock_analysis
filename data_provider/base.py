@@ -188,12 +188,25 @@ def _is_meaningful_chip_distribution(chip: Any) -> bool:
 
 
 def _market_tag(code: str) -> str:
-    """返回市场标签: cn/us/hk."""
+    """Return market label: cn/us/hk/crypto."""
+    if _is_crypto_market(code):
+        return "crypto"
     if _is_us_market(code):
         return "us"
     if _is_hk_market(code):
         return "hk"
     return "cn"
+
+
+def _is_crypto_market(code: str) -> bool:
+    """Check if code looks like a crypto symbol (e.g. BTC, ETH, SOL)."""
+    from src.data.crypto_sector_loader import is_known_crypto
+    return is_known_crypto(code)
+
+
+def _is_crypto_paprika_id(code: str) -> bool:
+    """Check if code looks like a CoinPaprika ID (contains '-')."""
+    return "-" in code and not code.startswith("HK")
 
 
 def is_bse_code(code: str) -> bool:

@@ -722,6 +722,112 @@ class AlertCooldownRecord(Base):
     )
 
 
+class CryptoNews(Base):
+    """Crypto news article with AI analysis results.
+
+    Stores scraped crypto news from RSS feeds with sentiment analysis,
+    coin mentions, sector classifications, and event type tagging.
+    """
+
+    __tablename__ = "crypto_news"
+
+    id = Column(String(32), primary_key=True)  # MD5 hash of title+source
+    source = Column(String(32), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    content = Column(Text)
+    url = Column(String(1000))
+    published_at = Column(DateTime, index=True)
+    crawled_at = Column(DateTime, default=datetime.now)
+
+    # AI analysis fields
+    mentioned_coins = Column(Text)  # JSON array of coin symbols
+    affected_sectors = Column(Text)  # JSON array of sector names
+    sentiment = Column(String(32))  # strong_bullish/bullish/neutral/bearish/strong_bearish
+    sentiment_score = Column(Float)  # 0.0 (bearish) to 1.0 (bullish)
+    event_type = Column(String(64))  # regulation/hack/adoption/partnership/macro/etc.
+    reasoning = Column(Text)  # brief analysis reasoning
+    relevance_score = Column(Float)  # 0.0 to 1.0
+    concept_coins = Column(Text)  # JSON array of concept coin dicts
+
+    __table_args__ = (
+        UniqueConstraint("id", name="uix_crypto_news_id"),
+        Index("ix_crypto_news_source_pub", "source", "published_at"),
+        Index("ix_crypto_news_sentiment", "sentiment"),
+    )
+
+
+class CoinPrice(Base):
+    """Crypto coin price snapshot from CoinPaprika."""
+
+    __tablename__ = "coin_prices"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    coin_id = Column(String(64), nullable=False, index=True)  # paprika_id
+    symbol = Column(String(16), nullable=False, index=True)
+    name = Column(String(64))
+    timestamp = Column(DateTime, nullable=False, index=True)
+    price_usd = Column(Float, nullable=False)
+    volume_24h_usd = Column(Float)
+    market_cap_usd = Column(Float)
+    percent_change_1h = Column(Float)
+    percent_change_24h = Column(Float)
+    percent_change_7d = Column(Float)
+    open_24h = Column(Float)
+    high_24h = Column(Float)
+    low_24h = Column(Float)
+
+    __table_args__ = (
+        UniqueConstraint("coin_id", "timestamp", name="uix_coin_price_time"),
+        Index("ix_coin_price_symbol_time", "symbol", "timestamp"),
+    )
+
+
+class CapitalFlowSnapshot(Base):
+    """A-share daily capital flow snapshot.
+
+    Stores northbound flow, sector flow rankings, and dragon-tiger board data
+    as JSON payload for AI context injection and historical querying.
+    """
+
+    __tablename__ = "capital_flow_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    snapshot_date = Column(Date, nullable=False, index=True)
+    fetched_at = Column(DateTime, default=datetime.now)
+    payload_json = Column(Text, nullable=False)  # Full CapitalFlowSnapshot as JSON
+
+    __table_args__ = (
+        UniqueConstraint("snapshot_date", name="uix_capital_flow_date"),
+    )
+
+
+class CompositeSignal(Base):
+    """Stored composite signal for any asset (crypto or stock).
+
+    Records the multi-factor fusion score and component breakdowns.
+    """
+
+    __tablename__ = "composite_signals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    asset_code = Column(String(16), nullable=False, index=True)  # BTC, 600519, etc.
+    asset_type = Column(String(16), nullable=False, index=True)  # crypto/stock/index
+    signal_date = Column(Date, nullable=False, index=True)
+    composite_score = Column(Float, nullable=False)  # -1.0 to +1.0
+    signal_label = Column(String(32), nullable=False)  # strong_buy/buy/neutral/sell/strong_sell
+    components_json = Column(Text, nullable=False)  # JSON of sub-signal scores
+    weights_json = Column(Text)  # JSON of weights used
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_code", "asset_type", "signal_date",
+            name="uix_signal_asset_date",
+        ),
+        Index("ix_signal_date_type", "signal_date", "asset_type"),
+    )
+
+
 class _DatabaseManagerMeta(type):
     """Serialize DatabaseManager construction across __new__ and __init__."""
 
@@ -2232,6 +2338,286 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 for r in by_model_rows
             ],
         }
+
+
+    # ================================================================
+    # Crypto & Capital Flow CRUD
+    # ================================================================
+
+    def save_crypto_news(self, news_items: list) -> int:
+        """Batch save crypto news items with INSERT OR IGNORE for dedup."""
+        saved = 0
+        with self.session_scope() as session:
+            for item in news_items:
+                record = CryptoNews(
+                    id=item.get("id", ""),
+                    source=item.get("source", ""),
+                    title=item.get("title", ""),
+                    content=item.get("content"),
+                    url=item.get("url"),
+                    published_at=item.get("published_at"),
+                    crawled_at=datetime.now(),
+                    mentioned_coins=item.get("mentioned_coins"),
+                    affected_sectors=item.get("affected_sectors"),
+                    sentiment=item.get("sentiment"),
+                    sentiment_score=item.get("sentiment_score"),
+                    event_type=item.get("event_type"),
+                    reasoning=item.get("reasoning"),
+                    relevance_score=item.get("relevance_score"),
+                    concept_coins=item.get("concept_coins"),
+                )
+                try:
+                    session.merge(record)
+                    saved += 1
+                except Exception:
+                    pass
+        return saved
+
+    def get_crypto_news(
+        self, hours: int = 24, limit: int = 50,
+        source: Optional[str] = None, sentiment: Optional[str] = None,
+        coin: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Query crypto news with optional filters."""
+        with self.session_scope() as session:
+            cutoff = datetime.now() - timedelta(hours=hours)
+            stmt = select(CryptoNews).where(CryptoNews.published_at >= cutoff)
+            if source:
+                stmt = stmt.where(CryptoNews.source == source)
+            if sentiment:
+                stmt = stmt.where(CryptoNews.sentiment == sentiment)
+            if coin:
+                stmt = stmt.where(CryptoNews.mentioned_coins.like(f"%{coin}%"))
+            stmt = stmt.order_by(desc(CryptoNews.published_at)).limit(limit)
+            rows = session.execute(stmt).scalars().all()
+            return [
+                {
+                    "id": r.id, "source": r.source, "title": r.title,
+                    "content": r.content, "url": r.url,
+                    "published_at": r.published_at.isoformat() if r.published_at else None,
+                    "mentioned_coins": r.mentioned_coins,
+                    "affected_sectors": r.affected_sectors,
+                    "sentiment": r.sentiment, "sentiment_score": r.sentiment_score,
+                    "event_type": r.event_type, "reasoning": r.reasoning,
+                    "relevance_score": r.relevance_score,
+                }
+                for r in rows
+            ]
+
+    def get_crypto_news_summary(self, hours: int = 24) -> Dict[str, Any]:
+        """Get aggregate summary of crypto news sentiment."""
+        with self.session_scope() as session:
+            cutoff = datetime.now() - timedelta(hours=hours)
+            total = session.query(func.count(CryptoNews.id)).where(
+                CryptoNews.published_at >= cutoff
+            ).scalar() or 0
+            bullish = session.query(func.count(CryptoNews.id)).where(
+                CryptoNews.published_at >= cutoff,
+                CryptoNews.sentiment.in_(["strong_bullish", "bullish"]),
+            ).scalar() or 0
+            bearish = session.query(func.count(CryptoNews.id)).where(
+                CryptoNews.published_at >= cutoff,
+                CryptoNews.sentiment.in_(["strong_bearish", "bearish"]),
+            ).scalar() or 0
+            avg_score = session.query(func.avg(CryptoNews.sentiment_score)).where(
+                CryptoNews.published_at >= cutoff,
+                CryptoNews.sentiment_score.isnot(None),
+            ).scalar()
+            return {
+                "total": total,
+                "bullish": bullish,
+                "bearish": bearish,
+                "neutral": total - bullish - bearish,
+                "avg_sentiment_score": round(avg_score, 3) if avg_score else None,
+            }
+
+    def get_crypto_coin_mentions(self, hours: int = 24, top_n: int = 20) -> List[Dict]:
+        """Get top mentioned coins with aggregate sentiment."""
+        with self.session_scope() as session:
+            cutoff = datetime.now() - timedelta(hours=hours)
+            rows = session.execute(
+                select(CryptoNews).where(
+                    CryptoNews.published_at >= cutoff,
+                    CryptoNews.mentioned_coins.isnot(None),
+                )
+            ).scalars().all()
+
+            coin_stats: Dict[str, Dict] = {}
+            for r in rows:
+                try:
+                    coins = json.loads(r.mentioned_coins or "[]")
+                except json.JSONDecodeError:
+                    continue
+                for c in coins:
+                    symbol = c if isinstance(c, str) else c.get("symbol", "")
+                    if not symbol:
+                        continue
+                    if symbol not in coin_stats:
+                        coin_stats[symbol] = {"symbol": symbol, "count": 0, "scores": []}
+                    coin_stats[symbol]["count"] += 1
+                    if r.sentiment_score is not None:
+                        coin_stats[symbol]["scores"].append(r.sentiment_score)
+
+            result = []
+            for symbol, stats in coin_stats.items():
+                avg_s = sum(stats["scores"]) / len(stats["scores"]) if stats["scores"] else 0
+                result.append({
+                    "symbol": symbol, "mention_count": stats["count"],
+                    "avg_sentiment": round(avg_s, 3),
+                })
+            result.sort(key=lambda x: x["mention_count"], reverse=True)
+            return result[:top_n]
+
+    def save_coin_price(self, paprika_id: str, symbol: str, name: str,
+                        data: Dict[str, Any]) -> bool:
+        """Save a single CoinPaprika ticker snapshot."""
+        with self.session_scope() as session:
+            record = CoinPrice(
+                coin_id=paprika_id, symbol=symbol, name=name,
+                timestamp=datetime.now(), price_usd=data.get("price_usd", 0),
+                volume_24h_usd=data.get("volume_24h_usd"),
+                market_cap_usd=data.get("market_cap_usd"),
+                percent_change_1h=data.get("percent_change_1h"),
+                percent_change_24h=data.get("percent_change_24h"),
+                percent_change_7d=data.get("percent_change_7d"),
+                open_24h=data.get("open_24h"), high_24h=data.get("high_24h"),
+                low_24h=data.get("low_24h"),
+            )
+            session.add(record)
+        return True
+
+    def get_coin_prices(self, symbol: str, hours: int = 24, limit: int = 100
+                        ) -> List[Dict[str, Any]]:
+        """Get coin price history."""
+        with self.session_scope() as session:
+            cutoff = datetime.now() - timedelta(hours=hours)
+            rows = session.execute(
+                select(CoinPrice).where(
+                    CoinPrice.symbol == symbol.upper(),
+                    CoinPrice.timestamp >= cutoff,
+                ).order_by(desc(CoinPrice.timestamp)).limit(limit)
+            ).scalars().all()
+            return [
+                {
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                    "price_usd": r.price_usd,
+                    "volume_24h_usd": r.volume_24h_usd,
+                    "market_cap_usd": r.market_cap_usd,
+                    "percent_change_1h": r.percent_change_1h,
+                    "percent_change_24h": r.percent_change_24h,
+                    "percent_change_7d": r.percent_change_7d,
+                }
+                for r in reversed(rows)
+            ]
+
+    def get_latest_coin_price(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get the most recent coin price snapshot."""
+        with self.session_scope() as session:
+            row = session.execute(
+                select(CoinPrice).where(CoinPrice.symbol == symbol.upper())
+                .order_by(desc(CoinPrice.timestamp)).limit(1)
+            ).scalars().first()
+            if not row:
+                return None
+            return {
+                "symbol": row.symbol, "name": row.name,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "price_usd": row.price_usd, "volume_24h_usd": row.volume_24h_usd,
+                "market_cap_usd": row.market_cap_usd,
+                "percent_change_1h": row.percent_change_1h,
+                "percent_change_24h": row.percent_change_24h,
+                "percent_change_7d": row.percent_change_7d,
+            }
+
+    def save_capital_flow_snapshot(self, snapshot_date, payload_json: str) -> bool:
+        """Save a daily capital flow snapshot (upsert by date)."""
+        with self.session_scope() as session:
+            record = CapitalFlowSnapshot(
+                snapshot_date=snapshot_date,
+                payload_json=payload_json,
+                fetched_at=datetime.now(),
+            )
+            session.merge(record)
+        return True
+
+    def get_capital_flow_snapshots(self, days: int = 30) -> List[Dict[str, Any]]:
+        """Get recent capital flow snapshots."""
+        with self.session_scope() as session:
+            cutoff = date.today() - timedelta(days=days)
+            rows = session.execute(
+                select(CapitalFlowSnapshot).where(
+                    CapitalFlowSnapshot.snapshot_date >= cutoff,
+                ).order_by(desc(CapitalFlowSnapshot.snapshot_date))
+            ).scalars().all()
+            return [
+                {
+                    "snapshot_date": r.snapshot_date.isoformat() if r.snapshot_date else None,
+                    "fetched_at": r.fetched_at.isoformat() if r.fetched_at else None,
+                    "payload_json": r.payload_json,
+                }
+                for r in rows
+            ]
+
+    def save_composite_signal(self, asset_code: str, asset_type: str,
+                               signal_date, composite_score: float,
+                               signal_label: str, components_json: str,
+                               weights_json: Optional[str] = None) -> bool:
+        """Save a composite signal record (upsert)."""
+        with self.session_scope() as session:
+            record = CompositeSignal(
+                asset_code=asset_code, asset_type=asset_type,
+                signal_date=signal_date, composite_score=composite_score,
+                signal_label=signal_label, components_json=components_json,
+                weights_json=weights_json,
+                created_at=datetime.now(),
+            )
+            session.merge(record)
+        return True
+
+    def get_composite_signals(self, asset_code: str, asset_type: str = "crypto",
+                               days: int = 30) -> List[Dict[str, Any]]:
+        """Get recent composite signals for an asset."""
+        with self.session_scope() as session:
+            cutoff = date.today() - timedelta(days=days)
+            rows = session.execute(
+                select(CompositeSignal).where(
+                    CompositeSignal.asset_code == asset_code,
+                    CompositeSignal.asset_type == asset_type,
+                    CompositeSignal.signal_date >= cutoff,
+                ).order_by(desc(CompositeSignal.signal_date))
+            ).scalars().all()
+            return [
+                {
+                    "asset_code": r.asset_code, "asset_type": r.asset_type,
+                    "signal_date": r.signal_date.isoformat() if r.signal_date else None,
+                    "composite_score": r.composite_score,
+                    "signal_label": r.signal_label,
+                    "components_json": r.components_json,
+                    "weights_json": r.weights_json,
+                }
+                for r in rows
+            ]
+
+    def get_latest_composite_signal(self, asset_code: str, asset_type: str = "crypto"
+                                     ) -> Optional[Dict[str, Any]]:
+        """Get the most recent composite signal."""
+        with self.session_scope() as session:
+            row = session.execute(
+                select(CompositeSignal).where(
+                    CompositeSignal.asset_code == asset_code,
+                    CompositeSignal.asset_type == asset_type,
+                ).order_by(desc(CompositeSignal.signal_date)).limit(1)
+            ).scalars().first()
+            if not row:
+                return None
+            return {
+                "asset_code": row.asset_code, "asset_type": row.asset_type,
+                "signal_date": row.signal_date.isoformat() if row.signal_date else None,
+                "composite_score": row.composite_score,
+                "signal_label": row.signal_label,
+                "components_json": row.components_json,
+                "weights_json": row.weights_json,
+            }
 
 
 # 便捷函数

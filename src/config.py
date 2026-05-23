@@ -883,6 +883,40 @@ class Config:
     # CONFIG_VALIDATE_MODE=strict: exit(1) when any "error" severity issue is found
     config_validate_mode: str = "warn"
 
+    # === 加密货币配置 ===
+    crypto_enabled: bool = False           # 是否启用加密货币分析
+    crypto_coins: List[str] = field(default_factory=list)  # 关注的币种列表，如 BTC,ETH,SOL
+    # 信号融合权重
+    crypto_signal_weight_sentiment: float = 0.28
+    crypto_signal_weight_technical: float = 0.22
+    crypto_signal_weight_fear_greed: float = 0.10
+    crypto_signal_weight_momentum: float = 0.14
+    crypto_signal_weight_macro: float = 0.18
+    crypto_signal_weight_onchain: float = 0.08
+    # Crypto 新闻爬取
+    crypto_news_enabled: bool = True       # 是否启用加密货币新闻爬取
+    crypto_news_max_per_source: int = 10   # 每个来源最大新闻数
+    crypto_news_max_total: int = 50        # 总新闻数上限
+    crypto_news_dedup_threshold: float = 0.75  # 去重相似度阈值
+    crypto_news_sources: str = ""          # 逗号分隔的新闻源，留空=全部
+    # Crypto 数据源开关
+    fear_greed_enabled: bool = True
+    onchain_enabled: bool = True
+    macro_enabled: bool = True
+    derivatives_enabled: bool = True
+
+    # === A股新闻爬取配置 ===
+    astock_news_enabled: bool = True       # 是否启用A股新闻爬取
+    astock_news_max_per_source: int = 10   # 每个来源最大新闻数
+    astock_news_max_total: int = 30        # 总新闻数上限
+    astock_news_dedup_threshold: float = 0.75  # 去重相似度阈值
+    astock_news_sources: str = ""          # 逗号分隔的新闻源，留空=全部
+
+    # === 资金流向配置 ===
+    capital_flow_enabled: bool = True      # 是否启用资金流向数据
+    northbound_days: int = 5               # 北向资金历史天数
+    capital_flow_top_n: int = 10           # 板块/龙虎榜排名数量
+
     # --- Post-init validation ---------------------------------------------------
     _VALID_AGENT_ARCH = {"single", "multi"}
     _VALID_ORCHESTRATOR_MODES = {"quick", "standard", "full", "specialist"}
@@ -1284,6 +1318,10 @@ class Config:
         if report_show_llm_model_raw is not None and not report_show_llm_model_raw.strip():
             report_show_llm_model = False
 
+        # === Crypto configuration ===
+        crypto_coins_str = os.getenv('CRYPTO_COINS', 'BTC,ETH,SOL')
+        crypto_coins = [c.strip().upper() for c in crypto_coins_str.split(',') if c.strip()]
+
         return cls(
             stock_list=stock_list,
             feishu_app_id=os.getenv('FEISHU_APP_ID'),
@@ -1647,7 +1685,34 @@ class Config:
                 field_name='PORTFOLIO_RISK_LOOKBACK_DAYS',
                 minimum=1,
             ),
-            portfolio_fx_update_enabled=os.getenv('PORTFOLIO_FX_UPDATE_ENABLED', 'true').lower() == 'true'
+            portfolio_fx_update_enabled=os.getenv('PORTFOLIO_FX_UPDATE_ENABLED', 'true').lower() == 'true',
+            # Crypto configuration
+            crypto_enabled=os.getenv('CRYPTO_ENABLED', 'false').lower() == 'true',
+            crypto_coins=crypto_coins,
+            crypto_signal_weight_sentiment=parse_env_float(os.getenv('CRYPTO_SIGNAL_WEIGHT_SENTIMENT'), 0.28, field_name='CRYPTO_SIGNAL_WEIGHT_SENTIMENT'),
+            crypto_signal_weight_technical=parse_env_float(os.getenv('CRYPTO_SIGNAL_WEIGHT_TECHNICAL'), 0.22, field_name='CRYPTO_SIGNAL_WEIGHT_TECHNICAL'),
+            crypto_signal_weight_fear_greed=parse_env_float(os.getenv('CRYPTO_SIGNAL_WEIGHT_FEAR_GREED'), 0.10, field_name='CRYPTO_SIGNAL_WEIGHT_FEAR_GREED'),
+            crypto_signal_weight_momentum=parse_env_float(os.getenv('CRYPTO_SIGNAL_WEIGHT_MOMENTUM'), 0.14, field_name='CRYPTO_SIGNAL_WEIGHT_MOMENTUM'),
+            crypto_signal_weight_macro=parse_env_float(os.getenv('CRYPTO_SIGNAL_WEIGHT_MACRO'), 0.18, field_name='CRYPTO_SIGNAL_WEIGHT_MACRO'),
+            crypto_signal_weight_onchain=parse_env_float(os.getenv('CRYPTO_SIGNAL_WEIGHT_ONCHAIN'), 0.08, field_name='CRYPTO_SIGNAL_WEIGHT_ONCHAIN'),
+            crypto_news_enabled=os.getenv('CRYPTO_NEWS_ENABLED', 'true').lower() == 'true',
+            crypto_news_max_per_source=parse_env_int(os.getenv('CRYPTO_NEWS_MAX_PER_SOURCE'), 10, field_name='CRYPTO_NEWS_MAX_PER_SOURCE', minimum=1),
+            crypto_news_max_total=parse_env_int(os.getenv('CRYPTO_NEWS_MAX_TOTAL'), 50, field_name='CRYPTO_NEWS_MAX_TOTAL', minimum=1),
+            crypto_news_dedup_threshold=parse_env_float(os.getenv('CRYPTO_NEWS_DEDUP_THRESHOLD'), 0.75, field_name='CRYPTO_NEWS_DEDUP_THRESHOLD'),
+            crypto_news_sources=os.getenv('CRYPTO_NEWS_SOURCES', ''),
+            fear_greed_enabled=os.getenv('FEAR_GREED_ENABLED', 'true').lower() == 'true',
+            onchain_enabled=os.getenv('ONCHAIN_ENABLED', 'true').lower() == 'true',
+            macro_enabled=os.getenv('MACRO_ENABLED', 'true').lower() == 'true',
+            derivatives_enabled=os.getenv('DERIVATIVES_ENABLED', 'true').lower() == 'true',
+            # A-share news & capital flow
+            astock_news_enabled=os.getenv('ASTOCK_NEWS_ENABLED', 'true').lower() == 'true',
+            astock_news_max_per_source=parse_env_int(os.getenv('ASTOCK_NEWS_MAX_PER_SOURCE'), 10, field_name='ASTOCK_NEWS_MAX_PER_SOURCE', minimum=1),
+            astock_news_max_total=parse_env_int(os.getenv('ASTOCK_NEWS_MAX_TOTAL'), 30, field_name='ASTOCK_NEWS_MAX_TOTAL', minimum=1),
+            astock_news_dedup_threshold=parse_env_float(os.getenv('ASTOCK_NEWS_DEDUP_THRESHOLD'), 0.75, field_name='ASTOCK_NEWS_DEDUP_THRESHOLD'),
+            astock_news_sources=os.getenv('ASTOCK_NEWS_SOURCES', ''),
+            capital_flow_enabled=os.getenv('CAPITAL_FLOW_ENABLED', 'true').lower() == 'true',
+            northbound_days=parse_env_int(os.getenv('NORTHBOUND_DAYS'), 5, field_name='NORTHBOUND_DAYS', minimum=1),
+            capital_flow_top_n=parse_env_int(os.getenv('CAPITAL_FLOW_TOP_N'), 10, field_name='CAPITAL_FLOW_TOP_N', minimum=1),
         )
     
     @classmethod
