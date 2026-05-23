@@ -3,7 +3,9 @@
 
 Combines:
     1. AI News Sentiment (28%) — from analyzed crypto news in DB
-    2. Technical Analysis (22%) — multi-TF RSI/MACD/BB/EMA
+    2. Technical Analysis (22%) — multi-TF RSI/MACD/BB/EMA (60%)
+       + DSA-enhanced indicators (40%): candlestick patterns, volume analysis,
+       multi-period RSI(6/12/24), BIAS, trend classification
     3. Fear & Greed (10%) — contrarian indicator
     4. Price Momentum (14%) — 24h + 7d percent changes
     5. Macro Regime (18%) — DXY, VIX, rates, inflation, etc.
@@ -24,6 +26,7 @@ import pandas as pd
 
 from src.data.crypto_sector_loader import get_paprika_id
 from .indicators import TechnicalIndicators
+from .enhanced_indicators import compute_enhanced_indicators
 
 logger = logging.getLogger(__name__)
 
@@ -278,10 +281,13 @@ class SignalFusion:
             return 0.0, {"rsi": None}
 
     def _get_technical_signal(self, coin_symbol: str) -> Tuple[float, dict]:
-        """Multi-timeframe technical analysis with alignment bonus.
+        """Multi-timeframe technical analysis with alignment bonus + enhanced indicators.
 
-        Weights: 1h=35%, 4h=35%, 1d=30%
-        Alignment: if all 3 TFs agree on direction → +20% boost.
+        Weights: 1h=35%, 4h=35%, 1d=30%  (→ ta_score)
+        Enhanced indicators computed on 1d data → enhanced_score
+        Final: ta_score * 0.60 + enhanced_score * 0.40
+
+        Alignment: if all 3 TFs agree on direction → +20% boost (applied to ta_score).
         """
         frames = self._fetch_timeframe_data(coin_symbol)
         if not frames:
@@ -299,27 +305,71 @@ class SignalFusion:
                 tf_scores[tf_name] = 0.0
                 tf_details[tf_name] = {"rsi": None}
 
-        weights = {"1h": 0.35, "4h": 0.35, "1d": 0.30}
-        total_w = sum(weights[tf] for tf in tf_scores if tf in frames)
+        tf_weights = {"1h": 0.35, "4h": 0.35, "1d": 0.30}
+        total_w = sum(tf_weights[tf] for tf in tf_scores if tf in frames)
         if total_w == 0:
             return 0.0, {"signal": "no_data", "rsi": None}
 
-        composite = sum(
-            tf_scores[tf] * weights[tf] / total_w
+        ta_score = sum(
+            tf_scores[tf] * tf_weights[tf] / total_w
             for tf in tf_scores if tf in frames
         )
 
-        # Alignment bonus
+        # Alignment bonus (applied to ta_score)
         available_scores = [tf_scores[tf] for tf in tf_scores if tf in frames]
         if len(available_scores) >= 2:
             all_bullish = all(s > 0.05 for s in available_scores)
             all_bearish = all(s < -0.05 for s in available_scores)
             if all_bullish or all_bearish:
-                composite *= 1.20
+                ta_score *= 1.20
             alignment = "all_bullish" if all_bullish else ("all_bearish" if all_bearish else "mixed")
         else:
             alignment = "insufficient"
 
+        ta_score = max(-1.0, min(1.0, ta_score))
+
+        # ------------------------------------------------------------------
+        # Enhanced indicators (DSA-derived): computed on 1d data only
+        # ------------------------------------------------------------------
+        enhanced_score = 0.0
+        enhanced_detail: Dict[str, Any] = {"signal": "no_data"}
+        ta_weight = 0.60
+        enhanced_weight = 0.40
+
+        if "1d" in frames and len(frames["1d"]) >= 20:
+            try:
+                enhanced = compute_enhanced_indicators(frames["1d"])
+                comp = enhanced.get("composite", {})
+                if comp and "score" in comp:
+                    enhanced_score = comp["score"]
+                    enhanced_detail = {
+                        "signal": comp.get("signal", "computed"),
+                        "score": comp["score"],
+                        "patterns": enhanced.get("patterns", {}).get("summary", ""),
+                        "patterns_count": enhanced.get("patterns", {}).get("patterns_count", 0),
+                        "volume_status": enhanced.get("volume", {}).get("volume_status", "none"),
+                        "rsi_signal": enhanced.get("rsi", {}).get("rsi_signal", "none"),
+                        "bias_signal": enhanced.get("bias", {}).get("bias_signal", "none"),
+                        "trend_state": enhanced.get("trend", {}).get("trend_state", "none"),
+                        "sub_scores": {
+                            "patterns": enhanced.get("patterns", {}).get("pattern_score"),
+                            "volume": enhanced.get("volume", {}).get("volume_score"),
+                            "rsi": enhanced.get("rsi", {}).get("rsi_score"),
+                            "bias": enhanced.get("bias", {}).get("bias_score"),
+                            "trend": enhanced.get("trend", {}).get("trend_score"),
+                        },
+                    }
+            except Exception as e:
+                logger.debug("Enhanced indicators failed for %s: %s", coin_symbol, e)
+                ta_weight = 1.0
+                enhanced_weight = 0.0
+        else:
+            # Not enough daily data for enhanced indicators, use ta only
+            ta_weight = 1.0
+            enhanced_weight = 0.0
+
+        # Blend
+        composite = ta_score * ta_weight + enhanced_score * enhanced_weight
         composite = max(-1.0, min(1.0, composite))
 
         d1 = tf_details.get("1d", {})
@@ -330,7 +380,12 @@ class SignalFusion:
             "bb": d1.get("bb_signal"),
             "ema": d1.get("ema_trend"),
             "score": round(composite, 3),
+            "ta_score": round(ta_score, 3),
+            "ta_weight": ta_weight,
+            "enhanced_score": round(enhanced_score, 3),
+            "enhanced_weight": enhanced_weight,
             "alignment": alignment,
+            "enhanced": enhanced_detail,
             "timeframes": {
                 tf: {
                     "score": round(tf_scores[tf], 3),
